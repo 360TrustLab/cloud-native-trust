@@ -1,0 +1,365 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "360TrustLab CRH07 synthetic containment lab",
+  "Parameters": {
+    "PermissionMode": {
+      "Type": "String",
+      "AllowedValues": [
+        "before",
+        "after"
+      ],
+      "Default": "after"
+    },
+    "PresenterPrincipalArn": {
+      "Type": "String",
+      "AllowedPattern": "arn:aws:iam::[0-9]{12}:(user|role)/.+"
+    }
+  },
+  "Conditions": {
+    "BeforeHardening": {
+      "Fn::Equals": [
+        {
+          "Ref": "PermissionMode"
+        },
+        "before"
+      ]
+    }
+  },
+  "Resources": {
+    "Documents": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "ExpireDemoData",
+              "Status": "Enabled",
+              "ExpirationInDays": 1
+            }
+          ]
+        }
+      }
+    },
+    "Metadata": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ]
+      }
+    },
+    "IntegrationSecret": {
+      "Type": "AWS::SecretsManager::Secret",
+      "Properties": {
+        "Description": "Synthetic conference fixture only",
+        "SecretString": "DEMO_ONLY_NOT_A_REAL_CREDENTIAL"
+      }
+    },
+    "UnrelatedSecret": {
+      "Type": "AWS::SecretsManager::Secret",
+      "Properties": {
+        "Description": "Synthetic unrelated conference fixture only",
+        "SecretString": "DEMO_ONLY_UNRELATED_FIXTURE"
+      }
+    },
+    "WorkloadRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "BoundedDemoResources",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:GetObject",
+                  "Resource": {
+                    "Fn::If": [
+                      "BeforeHardening",
+                      {
+                        "Fn::Sub": "${Documents.Arn}/*"
+                      },
+                      {
+                        "Fn::Sub": "${Documents.Arn}/documents/*"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "dynamodb:PutItem",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "Metadata",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "secretsmanager:GetSecretValue",
+                  "Resource": {
+                    "Fn::If": [
+                      "BeforeHardening",
+                      [
+                        {
+                          "Ref": "IntegrationSecret"
+                        },
+                        {
+                          "Ref": "UnrelatedSecret"
+                        }
+                      ],
+                      [
+                        {
+                          "Ref": "IntegrationSecret"
+                        }
+                      ]
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-app:*"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "Application": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "FunctionName": {
+          "Fn::Sub": "${AWS::StackName}-app"
+        },
+        "Runtime": "python3.12",
+        "Handler": "index.handler",
+        "Timeout": 15,
+        "MemorySize": 128,
+        "Role": {
+          "Fn::GetAtt": [
+            "WorkloadRole",
+            "Arn"
+          ]
+        },
+        "Code": {
+          "ZipFile": "import os,json,boto3\nfrom botocore.exceptions import ClientError\n\ndef handler(event,context):\n    if 'requestContext' in event:\n        return {'statusCode':200,'body':json.dumps({'service':'360TrustLab','status':'ready','secret_values_displayed':False})}\n    s3=boto3.client('s3');sm=boto3.client('secretsmanager');ddb=boto3.client('dynamodb')\n    def read_doc(key):\n        response=s3.get_object(Bucket=os.environ['BUCKET'],Key=key)\n        response['Body'].close()\n    cases=[\n      ('Read intended document',lambda:read_doc('documents/example.txt')),\n      ('Write application metadata',lambda:ddb.put_item(TableName=os.environ['TABLE'],Item={'id':{'S':'conference-probe'},'value':{'S':'synthetic'}})),\n      ('Read integration secret',lambda:sm.get_secret_value(SecretId=os.environ['SECRET_ARN'])),\n      ('Read unrelated document',lambda:read_doc('unrelated/example.txt')),\n      ('Read unrelated secret',lambda:sm.get_secret_value(SecretId=os.environ['OTHER_SECRET_ARN'])),\n    ]\n    results=[]\n    for name,operation in cases:\n        try:\n            operation();results.append({'name':name,'result':'ALLOW'})\n        except ClientError as error:\n            code=error.response['Error']['Code']\n            if code not in ['AccessDenied','AccessDeniedException','UnauthorizedOperation']:\n                results.append({'name':name,'result':'SETUP_ERROR','error_code':code})\n            else:results.append({'name':name,'result':'DENY','error_code':code})\n    return {'scope':'REAL AWS SDK request results inside Lambda','secret_values_displayed':False,'checks':results}\n"
+        },
+        "Environment": {
+          "Variables": {
+            "BUCKET": {
+              "Ref": "Documents"
+            },
+            "TABLE": {
+              "Ref": "Metadata"
+            },
+            "SECRET_ARN": {
+              "Ref": "IntegrationSecret"
+            },
+            "OTHER_SECRET_ARN": {
+              "Ref": "UnrelatedSecret"
+            }
+          }
+        }
+      }
+    },
+    "ApplicationLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${AWS::StackName}-app"
+        },
+        "RetentionInDays": 7
+      }
+    },
+    "Api": {
+      "Type": "AWS::ApiGatewayV2::Api",
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-api"
+        },
+        "ProtocolType": "HTTP"
+      }
+    },
+    "Integration": {
+      "Type": "AWS::ApiGatewayV2::Integration",
+      "Properties": {
+        "ApiId": {
+          "Ref": "Api"
+        },
+        "IntegrationType": "AWS_PROXY",
+        "IntegrationUri": {
+          "Fn::GetAtt": [
+            "Application",
+            "Arn"
+          ]
+        },
+        "PayloadFormatVersion": "2.0"
+      }
+    },
+    "HealthRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "Api"
+        },
+        "RouteKey": "GET /health",
+        "AuthorizationType": "AWS_IAM",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "Integration"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    "Stage": {
+      "Type": "AWS::ApiGatewayV2::Stage",
+      "Properties": {
+        "ApiId": {
+          "Ref": "Api"
+        },
+        "StageName": "$default",
+        "AutoDeploy": true
+      }
+    },
+    "ApiInvokePermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "Application"
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {
+          "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*/GET/health"
+        }
+      }
+    },
+    "ProbeRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Ref": "PresenterPrincipalArn"
+                }
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "InvokeDemoFunctionOnly",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "lambda:InvokeFunction",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "Application",
+                      "Arn"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "Bucket": {
+      "Value": {
+        "Ref": "Documents"
+      }
+    },
+    "FunctionName": {
+      "Value": {
+        "Ref": "Application"
+      }
+    },
+    "WorkloadRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "WorkloadRole",
+          "Arn"
+        ]
+      }
+    },
+    "ProbeRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "ProbeRole",
+          "Arn"
+        ]
+      }
+    },
+    "HealthApi": {
+      "Value": {
+        "Fn::GetAtt": [
+          "Api",
+          "ApiEndpoint"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "dynamodb:PutItem",
+        "secretsmanager:GetSecretValue"
+      ],
+      "Resource": [
+        "arn:aws:s3:::360trustlab-synthetic/*",
+        "arn:aws:dynamodb:us-east-1:000000000000:table/360trustlab-synthetic",
+        "arn:aws:secretsmanager:us-east-1:000000000000:secret:360trustlab/*"
+      ]
+    }
+  ]
+}
