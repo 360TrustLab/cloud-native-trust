@@ -22,8 +22,7 @@ or generate CloudTrail records. `artifacts/report.json` labels that boundary.
 
 ## Demo 2: blast radius (10–12 minutes)
 
-The deployable stack includes IAM-authenticated API Gateway → Lambda → S3,
-DynamoDB and Secrets Manager, plus a presenter-assumable role that can invoke
+The deployable stack includes IAM-authenticated API Gateway → Lambda → S3, DynamoDB, and Secrets Manager, plus a presenter-assumable role that can invoke
 only this lab's Lambda. The `before` policy expands access only to other synthetic
 resources in the same stack. The default is `after` (narrow).
 

@@ -24,7 +24,7 @@ def page(view):
             detail=('Broad subject before hardening: '+r['before']['subject']) if view=='before' else ('Exact subject after hardening: '+r['after']['subject'])
             content+='<h2>Workflow '+('before' if view=='before' else 'after')+' hardening</h2><p><code>'+esc(r[stage]['workflow_permissions'])+'</code></p><p>'+esc(r[stage]['action_reference'])+'</p>'
         else:
-            detail='Action/Resource subset model only. Synthetic ARNs. No JWT authentication, AWS SDK requests or CloudTrail events.'
+            detail='Action/Resource subset model only. Synthetic ARNs. No JWT authentication, AWS SDK requests, or CloudTrail events.'
             content+='<h2>Workload identity</h2><p>Secret references in configuration · no static access keys · no secret values displayed</p>'
     links=''.join('<a '+('aria-current="page" ' if k==view else '')+'href="/?view='+k+'">'+esc(v)+'</a>' for k,v in VIEWS.items())
     doc='''<!doctype html><html><head><meta charset="utf-8"><title>360TrustLab local demo</title><style>
