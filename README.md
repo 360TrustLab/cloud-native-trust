@@ -1,5 +1,12 @@
 # CRH07: Cloud-Native Trust Boundaries
 
+I use this lab to ask what a compromised workload can reach and how a team can
+narrow that access while preserving the intended application behavior. The
+role needs a maintenance owner and a recovery path, just as the service does.
+
+See [Operating decisions](OPERATING_DECISIONS.md) for permission removal,
+consumer rotation, dependency tradeoffs, and recovery.
+
 ## Local rehearsal
 
 ```sh

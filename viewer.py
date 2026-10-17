@@ -5,7 +5,7 @@ from pathlib import Path
 from urllib.parse import urlparse,parse_qs
 import lab
 ROOT=Path(__file__).parent
-VIEWS={'identity': 'Trace a secret to its workload identity', 'containment': 'Constrain the workload blast radius'}
+VIEWS={'identity': 'Who can retrieve this secret?', 'containment': 'What else can this workload reach?'}
 
 def report(view):
     return lab.evaluate()
