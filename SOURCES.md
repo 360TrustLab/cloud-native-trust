@@ -1,12 +1,11 @@
 # Technical references
 
-Reviewed for the conference lab on October 15, 2026.
+- [AWS policy evaluation](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html)
+- [Secrets Manager practices](https://docs.aws.amazon.com/secretsmanager/latest/userguide/best-practices.html)
+- [Secret rotation](https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotating-secrets.html)
+- [S3 actions and resource ARNs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-policy-actions.html)
 
-- GitHub OIDC and immutable subject claims: https://docs.github.com/en/actions/reference/security/oidc
-- GitHub OIDC with AWS: https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws
-- AWS policy evaluation: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html
-- CloudFormation: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/Welcome.html
-
-Local models are deliberately limited teaching aids. They do not validate JWT
-signatures, implement the full IAM evaluation algorithm, or produce CloudTrail
-events. Only an actual AWS run can establish the corresponding AWS results.
+The local model supports Action/Resource matching and explicit deny precedence.
+It rejects unsupported statement features. It does not implement the full IAM
+evaluation algorithm or generate CloudTrail events. The Lambda probe records
+actual AWS SDK results when deployed in a sandbox.
