@@ -23,17 +23,48 @@ or generate CloudTrail records. `artifacts/report.json` labels that boundary.
 
 1. Inspect `app/lambda_function.py` and `infra/stack.json`.
 2. Lambda environment stores secret ARNs, never secret values or static keys.
-3. The integration secret is accessible; the unrelated secret is denied after
-   hardening. No code path logs either value.
+3. Inspect the intended access boundary: the integration secret should be
+   accessible, and the unrelated secret should be denied after hardening.
+   Those outcomes still need real-account validation. No code path logs either value.
 4. Run the local policy comparison. With a sandbox, use the actual probe below.
 
-## Demo 2: blast radius (10–12 minutes)
+## Demo 2: blast radius locally (10–12 minutes)
+
+Run `python3 lab.py`, compare the before/after policy decisions, and inspect
+which synthetic resources remain reachable. Use the included local captures as
+fallback. These results establish only the local model's behavior.
+
+### Local acceptance checks
+
+The first backup slide focuses on the two secret reads. The second uses an
+editable acceptance table instead of repeating the same before/after image.
+The table reports actual local results from `lab.py` and `policies/after.json`:
+
+| Operation checked | Local after result |
+| --- | --- |
+| Read intended document | ALLOW |
+| Write application metadata | ALLOW |
+| Read integration secret | ALLOW |
+| Read unrelated document | DENY |
+| Read unrelated secret | DENY |
+
+The first three checks ask whether the intended application behavior survives.
+The last two ask whether unrelated access is denied. These are results from
+the limited local model, not verified AWS authorization. Rerun `python3 lab.py`
+to inspect the actions and synthetic resource ARNs behind each result.
+
+### Optional AWS sandbox extension (not yet validated)
+
+The CloudFormation template and AWS probe scripts have not been deployed or
+validated in a real AWS account. Complete the sandbox setup and probes before
+demonstrating actual AWS authorization. The behavior below describes the
+intended design, not verified cloud results.
 
 The deployable stack includes IAM-authenticated API Gateway → Lambda → S3, DynamoDB, and Secrets Manager, plus a presenter-assumable role that can invoke
 only this lab's Lambda. The `before` policy expands access only to other synthetic
 resources in the same stack. The default is `after` (narrow).
 
-## AWS setup (requires a dedicated account/profile)
+## Optional AWS sandbox setup (not yet validated; dedicated account/profile required)
 
 ```sh
 python3 -m venv .venv
